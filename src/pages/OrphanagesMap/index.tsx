@@ -1,61 +1,112 @@
-import React from 'react';
-import { Text, View, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Text, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Marker, Callout } from 'react-native-maps';
 import mapMarker from '../../images/map-marker.png';
 import { Feather } from '@expo/vector-icons';
 import { styles } from './styles';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { RectButton } from 'react-native-gesture-handler';
+import * as Location from 'expo-location';
+import api from '../../services/api';
+
+interface IOrphanage {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
 
 export default function OrphanagesMap() {
     const navigation = useNavigation();
+    const [initialPosition, setInitialPosition] = useState<[number, number]>([0, 0]);
+    const [orphanages, setOrphanages] = useState<IOrphanage[]>([]);
 
-    const handleNavigateToOrphanageDetails = () => {
-        navigation.navigate('OrphanageDetails');
+    useEffect(() => {
+      async function loadPosition(){
+        const { status } = await Location.requestPermissionsAsync();
+        
+        if(status !== 'granted'){
+          Alert.alert('Oooops...', 'Precisamos de sua autorização para obter a localização');
+          return;
+        }
+        
+        const location = await Location.getCurrentPositionAsync();
+        const { latitude, longitude} = location.coords;
+  
+        setInitialPosition([
+          latitude,
+          longitude
+        ]);
+      }
+      loadPosition();
+    }, [])
+    
+    useFocusEffect(() => {
+      async function load() {
+        const response = await api.get('orphanages');
+        setOrphanages(response.data);
+      }
+      load();
+    });
+
+    const handleNavigateToOrphanageDetails = (id: number) => {
+        navigation.navigate('OrphanageDetails', { id });
+    }
+
+    const handleNavigateToCreateOrphanage = () => {
+      navigation.navigate('SelectMapPosition')
     }
     
   return (
     <View style={styles.container}>
+      {initialPosition[0] !== 0 && (
       <MapView
         provider={PROVIDER_GOOGLE}
         style={styles.map} 
         initialRegion={{
-          latitude: -23.8349263,
-          longitude: -46.718843,
+          latitude: initialPosition[0],
+          longitude: initialPosition[1],
           latitudeDelta: 0.008,
           longitudeDelta: 0.008
-        }}>
-          <Marker
-            icon={mapMarker}
-            calloutAnchor={{
-              x: 2.7,
-              y: 0.8,
-            }}
-            coordinate={{
-              latitude: -23.8349263,
-              longitude: -46.718843,            }}
+        }}
+      >
+          {orphanages.map(orphanage => (
+            <Marker
+              key={orphanage.id}
+              icon={mapMarker}
+              calloutAnchor={{
+                x: 2.7,
+                y: 0.8,
+              }}
+              coordinate={{
+                latitude: orphanage.latitude,
+                longitude: orphanage.longitude,
+              }}
           >
             <Callout 
               tooltip
-              onPress={handleNavigateToOrphanageDetails}
+              onPress={() => handleNavigateToOrphanageDetails(orphanage.id)}
             >
               <View style={styles.calloutContainer}>
                 <Text style={styles.calloutText}>
-                  Lar das meninas
+                  {orphanage.name}
                 </Text>
               </View>
             </Callout>
           </Marker>
+          ))}
         </MapView>
+      )}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            2 Orfanatos encontrados
+            {`${orphanages.length} orfanatos encontrados`}
           </Text>
-          <TouchableOpacity 
+          <RectButton 
             style={styles.createOrphanageButton}
-            onPress={() => {}}
+            onPress={handleNavigateToCreateOrphanage}
           >
             <Feather name='plus' size={20} color='#fff' />
-          </TouchableOpacity>
+          </RectButton>
         </View>
     </View>
   );
